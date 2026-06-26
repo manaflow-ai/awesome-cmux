@@ -463,6 +463,7 @@ The right layout turns cmux from a terminal into a development cockpit. Three-pa
 | [danneu/danterm](https://github.com/danneu/danterm) | — | Build a macOS terminal on libghostty with vertical tab strips, split panes, collapsible tab groups, and JSON-serialised layout restore across restarts | Swift |
 | [davis7dotsh/my-term](https://github.com/davis7dotsh/my-term) | — | Prototype a native macOS terminal emulator with an Arc-style persistent sidebar and long-lived SwiftTerm sessions designed to host cmux workspaces indefinitely | Swift |
 | [chsm04/cmux-tower](https://github.com/chsm04/cmux-tower) | Claude Code | Launch TOML-defined workspace presets with role prompts, colors, and split layouts through a gum-powered picker, making repeatable Claude Code team layouts explicit and versionable | Shell |
+| [chendrizzy/color-atelier](https://github.com/chendrizzy/color-atelier) | Multi | Detect color tokens from live terminal output in a **Terminal Color Lens** browser pane, compare and triage in **Color Studio**, run WCAG and color-blind checks, and export CSS/Tailwind/Ghostty palettes — custom sidebar launcher plus daemon on `read-screen` | TypeScript |
 | [gomipapa/cmux-sidecar](https://github.com/gomipapa/cmux-sidecar) | Multi | Install Claude Code and Codex adapters that open code-server as a cmux sidecar pane, giving agents a neighboring editor surface without bundling or silently installing editor dependencies | Shell |
 | [n-filatov/cmux-workspace](https://github.com/n-filatov/cmux-workspace) | Multi | Store per-repo setup commands in `.cmux-workspace.json` and spawn cmux workspaces from that config, so project bootstrap, worktree creation, and workspace launch remain one repeatable command | TypeScript |
 | [Minoo7/cmux-hooks](https://github.com/Minoo7/cmux-hooks) | Multi | Configure SSH, Hermes, and omp/Pi hook adapters from one repository, centralizing notification formatting and sidebar badge behavior for teams that run agents across local and remote hosts | Shell |
@@ -518,6 +519,7 @@ Cross-reference tables organized by the agent you use. Tags tell you which featu
 | [chsm04/cmux-tower](https://github.com/chsm04/cmux-tower) | `layout` `worktree` `config` | Launch TOML workspace presets with role prompts, split layouts, and single/team/manual modes | Shell |
 | [umitaltintas/cmux-agent-toolkit](https://github.com/umitaltintas/cmux-agent-toolkit) | `orchestrate` `browser` `sidebar` `skill` | Teach fan-out execution, browser automation, sidebar updates, and wait-for signal synchronization | Markdown |
 | [baixianger/claude-orchestration-in-cmux](https://github.com/baixianger/claude-orchestration-in-cmux) | `orchestrate` `worktree` `skill` | Coordinate parallel work via pane delegation, worktree creation, and merge cycle management | Markdown |
+| [chendrizzy/color-atelier](https://github.com/chendrizzy/color-atelier) | `browser` `sidebar` `skill` | Teach Lens/Studio workflows, WCAG contrast checks, and multi-format palette export; install runtime via `./install.sh` | Markdown |
 | [ygrec-app/supreme-leader-skill](https://github.com/ygrec-app/supreme-leader-skill) | `orchestrate` `monitor` `skill` | Plan subtasks, spawn 2-8 workers, monitor via polling, review deliverables, and dispatch fixes | Markdown |
 | [ygrec-app/offload-task-skill](https://github.com/ygrec-app/offload-task-skill) | `orchestrate` `skill` | Offload a task to a split pane with an autonomous worker to preserve main session context | Markdown |
 | [mikasalikh/cmux-wf](https://github.com/mikasalikh/cmux-wf) | `orchestrate` `skill` | Bundle a PM orchestrator script with SKILL.md that reads PRDs and distributes work via cmux socket API | Shell · ★6 |
@@ -746,6 +748,8 @@ The main integration points:
 - **Browser automation** — control the embedded WebKit browser via `cmux browser` subcommands
 - **Pane management** — split, send, read-screen, and manage surfaces via `cmux` CLI
 - **Workspace lifecycle** — create, rename, switch, and close workspaces programmatically
+
+Reference implementation: [chendrizzy/color-atelier](https://github.com/chendrizzy/color-atelier) — TypeScript daemon, `cmux read-screen` scanner, custom sidebar launcher, and browser-split Studio/Lens UI.
 
 For a detailed walkthrough of the sidebar integration API, see [docs/sidebar-integration-api.md](./docs/sidebar-integration-api.md).
 
