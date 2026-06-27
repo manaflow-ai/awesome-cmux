@@ -337,6 +337,7 @@ cmux embeds a WebKit browser pane that agents can control via CLI. Plugins use `
 | [multiagentcognition/cmux-agent-mcp](https://github.com/multiagentcognition/cmux-agent-mcp) | Multi | Include browser automation as one capability among 81 MCP tools for multi-agent workspace orchestration — browser control is a supporting feature within a much larger multi-agent coordination toolkit | TypeScript |
 | [EtanHey/cmuxlayer](https://github.com/EtanHey/cmuxlayer) | Multi | Provide browser control tools alongside 22 other MCP tools for workspace management — a compact multi-tool server where browser access complements pane and session management rather than standing alone | TypeScript · ★5 |
 | [gomipapa/cmux-sidecar](https://github.com/gomipapa/cmux-sidecar) | Multi | Drop a code-server sidecar beside Claude Code or Codex in a cmux split, installing only the adapter scripts while leaving code-server installation explicit and user-controlled | Shell |
+| [TaoXieSZ/cmux-excalidraw](https://github.com/TaoXieSZ/cmux-excalidraw) | Multi | Render `.excalidraw` whiteboard files in a cmux browser split in read-only view mode with live reload on save, bundling the Excalidraw component locally and exposing a Command Palette action — distinct from Markdown and PDF preview plugins by targeting native Excalidraw scenes | TypeScript |
 
 ### 7. Worktrees & Workspace Management
 
@@ -658,6 +659,7 @@ These projects work across multiple agents or are agent-agnostic.
 | [basedcorp99/claude-worktree-zsh](https://github.com/basedcorp99/claude-worktree-zsh) | `worktree` `orchestrate` | Launch 5 agents (Claude/Codex/Droid/OpenCode/Pi) in worktrees with `cwl` dashboard and `cwm` merge-back | Shell |
 | [TimoKruth/cmux-t3code](https://github.com/TimoKruth/cmux-t3code) | `browser` `layout` `worktree` | Embed t3code AI coding GUI as per-workspace chat panels via sidecar Node.js servers on unique ports | — |
 | [LattyCat/cmux-workspace](https://github.com/LattyCat/cmux-workspace) | `layout` `config` | Create a Japanese 4-pane layout with yazi + Markdown preview + lazygit + AI terminal, symlinked to command palette | Shell |
+| [TaoXieSZ/cmux-excalidraw](https://github.com/TaoXieSZ/cmux-excalidraw) | `browser` `config` | Render `.excalidraw` whiteboard files in a cmux browser split in read-only view mode with live reload on save, bundling Excalidraw locally and adding a Command Palette action for any agent | TypeScript |
 
 ---
 
