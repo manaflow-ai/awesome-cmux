@@ -5,11 +5,6 @@ on:
   pull_request_target:
     types: [opened,closed,reopened,synchronize]
 
-# Signature updates share one file and must not race.
-concurrency:
-  group: cla-signatures
-  cancel-in-progress: false
-
 # Keep the token scoped to the GitHub API operations used by this action.
 permissions:
   # The action inspects prior runs; its optional rerun request is best-effort.
@@ -25,7 +20,26 @@ permissions:
 jobs:
   CLAAssistant:
     name: "CLA Assistant"
+    if: >-
+      (
+        github.event_name == 'pull_request_target' &&
+        github.event.action != 'closed'
+      ) ||
+      (
+        github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request &&
+        (
+          github.event.comment.body == 'recheck' ||
+          github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA'
+        )
+      )
     runs-on: ubuntu-latest
+    # Signature writes share one file. Queue every pending event so a newer
+    # comment cannot silently replace an earlier signature request.
+    concurrency:
+      group: cla-signatures
+      queue: max
+      cancel-in-progress: false
     steps:
       - name: "Check CLA commit history limit"
         # The archived action only inspects its first 100 commits. Refuse
@@ -82,22 +96,29 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           path-to-signatures: 'signatures/version1/cla.json'
-          path-to-document: 'https://github.com/manaflow-ai/awesome-cmux/blob/main/CLA.md'
+          # Pin the displayed document to the workflow revision that started
+          # this run, so a later default-branch edit cannot change the terms
+          # after a contributor signs.
+          path-to-document: 'https://github.com/manaflow-ai/awesome-cmux/blob/${{ github.workflow_sha }}/CLA.md'
           # The archived action calls the lock endpoint without the required
           # lock_reason. Disable that broken path and use the explicit step
           # below, which supplies a valid reason and fails on API errors.
           lock-pullrequest-aftermerge: 'false'
           # signatures live on the unprotected cla-signatures branch so required checks on main don't block the bot's signature commits
           branch: 'cla-signatures'
-          # Keep this list explicit. A username prefix is not proof that an
-          # account is a GitHub bot and would let a human bypass the CLA.
-          allowlist: lawrencecchen,github-actions[bot],chatmux-connections[bot]
+          custom-pr-sign-comment: 'I have read the CLA Document and I hereby sign the CLA'
 
+  LockMergedPullRequest:
+    name: "Lock merged pull request"
+    if: >-
+      github.event_name == 'pull_request_target' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
       - name: "Lock merged pull request"
-        if: >-
-          github.event_name == 'pull_request_target' &&
-          github.event.action == 'closed' &&
-          github.event.pull_request.merged == true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
