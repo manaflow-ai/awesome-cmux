@@ -4,7 +4,7 @@ on:
     types: [created]
   pull_request_target:
     branches: [main]
-    types: [opened,closed,reopened,synchronize]
+    types: [opened,closed,reopened,synchronize,edited]
 
 # Deny all permissions by default. The signature job grants only the API
 # scopes required by the archived action; the lock job narrows this further.
@@ -28,7 +28,10 @@ jobs:
         )
       )
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
+      # Temporary until the in-org action fork owns exact-head reruns. The
+      # archived action calls the rerun API after a contributor signs.
       actions: write
       contents: write
       issues: write
@@ -61,34 +64,127 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REPO_FULL_NAME: ${{ github.event.repository.full_name }}
+          EVENT_REPO_ID: ${{ github.event.repository.id }}
+          EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVENT_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          EVENT_HEAD_REPO_FULL_NAME: ${{ github.event.pull_request.head.repo.full_name }}
+          EVENT_HEAD_REPO_ID: ${{ github.event.pull_request.head.repo.id }}
+          EVENT_BASE_REPO_FULL_NAME: ${{ github.event.pull_request.base.repo.full_name }}
+          EVENT_BASE_REPO_ID: ${{ github.event.pull_request.base.repo.id }}
+          EVENT_BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
           set -euo pipefail
-          if ! [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
-            echo "::error title=CLA commit history lookup::Invalid pull request number: ${PR_NUMBER}."
+          if ! [[ "${PR_NUMBER}" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error title=CLA preflight failed::Invalid pull request number."
             exit 1
           fi
+
+          if ! command -v jq >/dev/null 2>&1; then
+            echo "::error title=CLA preflight failed::jq is required to validate live pull request metadata."
+            exit 1
+          fi
+
           pr_endpoint="repos/${GH_REPO}/pulls/${PR_NUMBER}"
-          if ! base_ref="$(gh api "$pr_endpoint" --jq '.base.ref' 2>/dev/null)"; then
-            echo "::error title=CLA base branch lookup::Unable to query the base branch for pull request ${PR_NUMBER}."
-            exit 1
-          fi
-          if [[ "$base_ref" != "main" ]]; then
-            echo "::error title=CLA base branch policy::CLA Assistant only accepts pull requests targeting main; pull request ${PR_NUMBER} targets ${base_ref}."
-            exit 1
-          fi
-          if ! commits="$(gh api "$pr_endpoint" --jq '.commits' 2>/dev/null)"; then
-            echo "::error title=CLA commit history lookup::Unable to query pull request ${PR_NUMBER} for its commit count."
-            exit 1
-          fi
-          if ! [[ "$commits" =~ ^[0-9]+$ ]]; then
-            echo "::error title=CLA commit history lookup::GitHub returned a non-numeric commit count for pull request ${PR_NUMBER}."
-            exit 1
-          fi
-          if (( commits > 100 )); then
-            echo "::error title=CLA commit history limit::CLA Assistant inspects only the first 100 commits; split or squash pull request ${PR_NUMBER} before signing."
-            exit 1
-          fi
-          echo "CLA commit history count: ${commits}"
+          verify_pr_snapshot() {
+            local phase="$1"
+            local pr_json
+            if ! pr_json="$(gh api "${pr_endpoint}" --jq '{base_ref: .base.ref, base_repo_full_name: .base.repo.full_name, base_repo_id: .base.repo.id, head_ref: .head.ref, head_sha: .head.sha, head_repo_full_name: .head.repo.full_name, head_repo_id: .head.repo.id, state: .state, merged: (.merged_at != null), commits: .commits}' 2>/dev/null)"; then
+              echo "::error title=CLA ${phase} preflight failed::Unable to query live pull request metadata."
+              return 1
+            fi
+
+            local base_ref base_repo_full_name base_repo_id
+            local head_ref head_sha head_repo_full_name head_repo_id
+            local state merged commits
+            if ! base_ref="$(jq -er '.base_ref | strings' <<<"${pr_json}" 2>/dev/null)" || [[ -z "${base_ref}" ]]; then
+              echo "::error title=CLA ${phase} preflight failed::GitHub returned no valid base branch."
+              return 1
+            fi
+            if ! base_repo_full_name="$(jq -er '.base_repo_full_name | strings' <<<"${pr_json}" 2>/dev/null)" || [[ -z "${base_repo_full_name}" ]]; then
+              echo "::error title=CLA ${phase} identity failed::GitHub returned no valid base repository name."
+              return 1
+            fi
+            if ! base_repo_id="$(jq -er '.base_repo_id | numbers' <<<"${pr_json}" 2>/dev/null)" || ! [[ "${base_repo_id}" =~ ^[1-9][0-9]*$ ]]; then
+              echo "::error title=CLA ${phase} identity failed::GitHub returned no positive base repository ID."
+              return 1
+            fi
+            if ! head_repo_full_name="$(jq -er '.head_repo_full_name | strings' <<<"${pr_json}" 2>/dev/null)" || ! [[ "${head_repo_full_name}" =~ ^[^/]+/[^/]+$ ]]; then
+              echo "::error title=CLA ${phase} identity failed::GitHub returned no valid head repository name."
+              return 1
+            fi
+            if ! head_repo_id="$(jq -er '.head_repo_id | numbers' <<<"${pr_json}" 2>/dev/null)" || ! [[ "${head_repo_id}" =~ ^[1-9][0-9]*$ ]]; then
+              echo "::error title=CLA ${phase} identity failed::GitHub returned no positive head repository ID."
+              return 1
+            fi
+            if ! head_sha="$(jq -er '.head_sha | strings' <<<"${pr_json}" 2>/dev/null)" || ! [[ "${head_sha}" =~ ^[0-9A-Fa-f]+$ ]]; then
+              echo "::error title=CLA ${phase} identity failed::GitHub returned no valid head commit."
+              return 1
+            fi
+            if ! head_ref="$(jq -er '.head_ref | strings' <<<"${pr_json}" 2>/dev/null)" || [[ -z "${head_ref}" ]]; then
+              echo "::error title=CLA ${phase} identity failed::GitHub returned no valid head ref."
+              return 1
+            fi
+            if ! state="$(jq -er '.state | strings' <<<"${pr_json}" 2>/dev/null)" || [[ "${state}" != "open" ]]; then
+              echo "::error title=CLA ${phase} state policy::Pull request is not open."
+              return 1
+            fi
+            if ! merged="$(jq -r '.merged' <<<"${pr_json}" 2>/dev/null)" || [[ "${merged}" != "false" ]]; then
+              echo "::error title=CLA ${phase} state policy::Pull request is already merged or has an invalid merge state."
+              return 1
+            fi
+            if ! commits="$(jq -er '.commits | numbers' <<<"${pr_json}" 2>/dev/null)" || ! [[ "${commits}" =~ ^[0-9]+$ ]]; then
+              echo "::error title=CLA ${phase} commit preflight failed::GitHub returned an invalid commit count."
+              return 1
+            fi
+            if (( commits > 100 )); then
+              echo "::error title=CLA commit history limit::CLA Assistant inspects only the first 100 commits; split or squash this pull request before signing."
+              return 1
+            fi
+
+            if [[ -z "${EVENT_REPO_FULL_NAME}" || "${EVENT_REPO_FULL_NAME}" != "${GH_REPO}" ]] || ! [[ "${EVENT_REPO_ID}" =~ ^[1-9][0-9]*$ ]]; then
+              echo "::error title=CLA ${phase} identity failed::The event repository identity is missing or invalid."
+              return 1
+            fi
+            if [[ "${base_repo_full_name}" != "${GH_REPO}" || "${base_repo_id}" != "${EVENT_REPO_ID}" ]]; then
+              echo "::error title=CLA ${phase} identity policy::The live pull request targets a different repository."
+              return 1
+            fi
+
+            if [[ "${EVENT_NAME}" == "pull_request_target" ]]; then
+              if [[ -z "${EVENT_HEAD_SHA}" || -z "${EVENT_HEAD_REF}" || -z "${EVENT_HEAD_REPO_FULL_NAME}" || -z "${EVENT_BASE_REPO_FULL_NAME}" || -z "${EVENT_BASE_REF}" ]]; then
+                echo "::error title=CLA ${phase} identity failed::The pull_request_target payload is missing repository identity."
+                return 1
+              fi
+              if ! [[ "${EVENT_HEAD_REPO_ID}" =~ ^[1-9][0-9]*$ ]] || ! [[ "${EVENT_BASE_REPO_ID}" =~ ^[1-9][0-9]*$ ]]; then
+                echo "::error title=CLA ${phase} identity failed::The pull_request_target payload has an invalid repository ID."
+                return 1
+              fi
+              if ! [[ "${EVENT_HEAD_SHA}" =~ ^[0-9A-Fa-f]+$ ]]; then
+                echo "::error title=CLA ${phase} identity failed::The pull_request_target payload has an invalid head commit."
+                return 1
+              fi
+              if [[ "${EVENT_HEAD_SHA}" != "${head_sha}" || "${EVENT_HEAD_REF}" != "${head_ref}" || "${EVENT_HEAD_REPO_FULL_NAME}" != "${head_repo_full_name}" || "${EVENT_HEAD_REPO_ID}" != "${head_repo_id}" ]]; then
+                echo "::error title=CLA ${phase} identity policy::The pull_request_target head identity is stale."
+                return 1
+              fi
+              if [[ "${EVENT_BASE_REPO_FULL_NAME}" != "${base_repo_full_name}" || "${EVENT_BASE_REPO_ID}" != "${base_repo_id}" || "${EVENT_BASE_REF}" != "${base_ref}" ]]; then
+                echo "::error title=CLA ${phase} identity policy::The pull_request_target base identity is stale."
+                return 1
+              fi
+            fi
+
+            if [[ "${base_ref}" != "main" ]]; then
+              echo "::error title=CLA base branch policy::CLA Assistant only accepts pull requests targeting main."
+              return 1
+            fi
+            echo "CLA ${phase} pull request identity verified."
+          }
+
+          verify_pr_snapshot "initial"
+          # Re-fetch immediately before the action to reject a stale head or repository identity.
+          verify_pr_snapshot "final"
 
       - name: "CLA Assistant"
         # The action handles signing and status updates. Merged pull requests
@@ -132,6 +228,7 @@ jobs:
       github.event.action == 'closed' &&
       github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       issues: write
     # Serialize lock writes with signature writes in the same bounded queue.
