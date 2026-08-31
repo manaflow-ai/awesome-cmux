@@ -5,17 +5,9 @@ on:
   pull_request_target:
     types: [opened,closed,reopened,synchronize]
 
-# Keep the token scoped to the GitHub API operations used by this action.
-permissions:
-  # The action inspects prior runs; its optional rerun request is best-effort.
-  actions: read
-  contents: write
-  issues: write
-  # GitHub's pull_request_target token denied issue comments for fork PRs with
-  # this set to read, despite the endpoint documentation allowing issues:write.
-  # Keep write until that live behavior changes.
-  pull-requests: write
-  statuses: write
+# Deny all permissions by default. The signature job grants only the API
+# scopes required by the archived action; the lock job narrows this further.
+permissions: {}
 
 jobs:
   CLAAssistant:
@@ -34,8 +26,13 @@ jobs:
         )
       )
     runs-on: ubuntu-latest
-    # Signature writes share one file. Queue every pending event so a newer
-    # comment cannot silently replace an earlier signature request.
+    permissions:
+      actions: read
+      contents: write
+      issues: write
+      pull-requests: write
+    # Signature and lock writes share repository state. Queue every pending
+    # event so a newer comment cannot silently replace an earlier request.
     concurrency:
       group: cla-signatures
       queue: max
@@ -63,7 +60,14 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
         run: |
           set -euo pipefail
-          commits="$(gh api "repos/${GH_REPO}/pulls/${PR_NUMBER}" --jq '.commits')"
+          if ! [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error title=CLA commit history lookup::Invalid pull request number: ${PR_NUMBER}."
+            exit 1
+          fi
+          if ! commits="$(gh api "repos/${GH_REPO}/pulls/${PR_NUMBER}" --jq '.commits')"; then
+            echo "::error title=CLA commit history lookup::Unable to query pull request ${PR_NUMBER} for its commit count."
+            exit 1
+          fi
           if ! [[ "$commits" =~ ^[0-9]+$ ]]; then
             echo "::error title=CLA commit history lookup::GitHub returned a non-numeric commit count for pull request ${PR_NUMBER}."
             exit 1
@@ -117,6 +121,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       issues: write
+    # Serialize lock writes with signature writes in the same bounded queue.
+    concurrency:
+      group: cla-signatures
+      queue: max
+      cancel-in-progress: false
     steps:
       - name: "Lock merged pull request"
         env:
