@@ -36,11 +36,10 @@ jobs:
       contents: write
       issues: write
       pull-requests: write
-    # Signature and lock writes share repository state. Queue every pending
-    # event so a newer comment cannot silently replace an earlier request.
+    # Signature and lock writes share repository state. GitHub's default
+    # concurrency policy keeps one running and one pending event.
     concurrency:
       group: cla-signatures
-      queue: max
       cancel-in-progress: false
     steps:
       - name: "Check CLA commit history limit"
@@ -261,7 +260,13 @@ jobs:
                 (.body | type) == "string" and
                 (.user | type) == "object" and
                 (.user.login | type) == "string" and
-                (.user.type | type) == "string"
+                (.user.login | length) > 0 and
+                (.user.type | type) == "string" and
+                (.user.type | length) > 0 and
+                (.user.id | type) == "number" and
+                (.user.id > 0) and
+                (.user.id <= 9007199254740991) and
+                ((.user.id | floor) == .user.id)
               ))
             ' <<<"${page_json}" >/dev/null 2>/dev/null; then
               echo "::error title=CLA comment audit failed::GitHub returned a comment with invalid author or body data."
@@ -273,17 +278,24 @@ jobs:
                 | .body as $raw
                 | .user as $user
                 | ($raw | ascii_downcase | sub("^\\s+"; "") | sub("\\s+$"; "")) as $normalized
-                | select($normalized | test($pattern))
-                | select($user.login != "github-actions[bot]")
-                | select(($raw != $exact) or ($user.type != "User"))
+                | ($normalized | test($pattern)) as $is_cla_candidate
+                | ($normalized | contains("cla assistant lite bot")) as $is_marker_candidate
+                | (($user.login == "github-actions[bot]") and ($user.type == "Bot") and ($user.id == 41898282)) as $canonical_bot
+                | select(
+                    ($is_marker_candidate and ($canonical_bot == false))
+                    or
+                    ($is_cla_candidate and ($canonical_bot == false) and (($raw != $exact) or ($user.type != "User")))
+                  )
                 | {
-                    non_exact: ($raw != $exact),
-                    non_human: ($user.type != "User")
+                    non_exact: ($is_cla_candidate and ($raw != $exact)),
+                    non_human: ($is_cla_candidate and ($user.type != "User")),
+                    unauthorized_marker: ($is_marker_candidate and ($canonical_bot == false))
                   }
               ] as $candidates
               | {
                   non_exact: ([$candidates[] | select(.non_exact)] | length),
                   non_human: ([$candidates[] | select(.non_human)] | length),
+                  unauthorized_marker: ([$candidates[] | select(.unauthorized_marker)] | length),
                   total: ($candidates | length)
                 }
             ' <<<"${page_json}" 2>/dev/null)"; then
@@ -298,12 +310,16 @@ jobs:
               echo "::error title=CLA comment audit failed::The historical comment audit returned an invalid author count."
               exit 1
             fi
+            if ! unauthorized_marker_count="$(jq -er '.unauthorized_marker | numbers' <<<"${counts_json}" 2>/dev/null)" || ! [[ "${unauthorized_marker_count}" =~ ^[0-9]+$ ]]; then
+              echo "::error title=CLA comment audit failed::The historical comment audit returned an invalid bot-marker count."
+              exit 1
+            fi
             if ! candidate_count="$(jq -er '.total | numbers' <<<"${counts_json}" 2>/dev/null)" || ! [[ "${candidate_count}" =~ ^[0-9]+$ ]]; then
               echo "::error title=CLA comment audit failed::The historical comment audit returned an invalid candidate count."
               exit 1
             fi
             if (( candidate_count > 0 )); then
-              echo "::error title=CLA comment policy::Found ${non_exact_count} non-exact and ${non_human_count} non-human historical CLA candidate comment(s); only an exact human signature is accepted."
+              echo "::error title=CLA comment policy::Found ${non_exact_count} non-exact, ${non_human_count} non-human, and ${unauthorized_marker_count} unauthorized bot-marker historical comment(s); only an exact human signature or the canonical github-actions[bot] marker is accepted."
               exit 1
             fi
             if (( page_count < 100 )); then
@@ -374,10 +390,9 @@ jobs:
     timeout-minutes: 10
     permissions:
       issues: write
-    # Serialize lock writes with signature writes in the same bounded queue.
+    # Serialize lock writes with signature writes in the same default queue.
     concurrency:
       group: cla-signatures
-      queue: max
       cancel-in-progress: false
     steps:
       - name: "Lock merged pull request"
