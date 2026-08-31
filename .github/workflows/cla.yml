@@ -5,7 +5,7 @@ on:
   pull_request_target:
     branches: [main]
     # Retargeting and metadata edits both need a fresh CLA result. The signer
-    # guard below excludes only closed pull requests.
+    # guard below accepts only open pull requests.
     types: [opened,closed,reopened,synchronize,edited]
 
 # Deny all permissions by default. The signature job grants only the API
@@ -13,12 +13,21 @@ on:
 permissions: {}
 
 jobs:
-  CLAAssistant:
-    name: "CLA Assistant v2"
+  CLACommentGate:
+    name: "Validate CLA trigger"
+    # This job has no write token or concurrency group. The expression is a
+    # coarse candidate filter; the shell step is the exact, case-sensitive
+    # authority because GitHub expression string comparisons ignore case.
     if: >-
       (
         github.event_name == 'pull_request_target' &&
-        github.event.action != 'closed'
+        github.event.pull_request.state == 'open' &&
+        (
+          github.event.action == 'opened' ||
+          github.event.action == 'reopened' ||
+          github.event.action == 'synchronize' ||
+          github.event.action == 'edited'
+        )
       ) ||
       (
         github.event_name == 'issue_comment' &&
@@ -27,6 +36,61 @@ jobs:
         (
           github.event.comment.body == 'recheck' ||
           github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA'
+        )
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: "Validate exact CLA trigger"
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          EVENT_PR_STATE: ${{ github.event.pull_request.state }}
+          EVENT_ISSUE_STATE: ${{ github.event.issue.state }}
+          EVENT_ISSUE_PR_URL: ${{ github.event.issue.pull_request.url }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+        run: |
+          set -euo pipefail
+          shopt -u nocasematch
+          fail() {
+            echo "::error title=CLA trigger policy::${1}"
+            exit 1
+          }
+
+          sign_phrase='I have read the CLA Document and I hereby sign the CLA'
+          if [[ "${EVENT_NAME}" == "issue_comment" ]]; then
+            [[ "${EVENT_ISSUE_STATE}" == "open" && -n "${EVENT_ISSUE_PR_URL}" ]] || fail "The comment is not on an open pull request."
+            [[ "${COMMENT_BODY}" == "${sign_phrase}" || "${COMMENT_BODY}" == "recheck" ]] || fail "Use the exact signing comment or the exact recheck command."
+          elif [[ "${EVENT_NAME}" == "pull_request_target" ]]; then
+            case "${EVENT_ACTION}" in
+              opened|reopened|synchronize|edited) ;;
+              *) fail "The pull request event is not an accepted CLA trigger." ;;
+            esac
+            [[ "${EVENT_PR_STATE}" == "open" ]] || fail "The pull request is not open for CLA signing."
+          else
+            fail "The event is not an accepted CLA trigger."
+          fi
+
+  CLAAssistant:
+    needs: CLACommentGate
+    name: "CLA Assistant v2"
+    if: >-
+      needs.CLACommentGate.result == 'success' &&
+      (
+        (
+          github.event_name == 'pull_request_target' &&
+          github.event.action != 'closed' &&
+          github.event.pull_request.state == 'open'
+        ) ||
+        (
+          github.event_name == 'issue_comment' &&
+          github.event.issue.pull_request &&
+          github.event.issue.state == 'open' &&
+          (
+            github.event.comment.body == 'recheck' ||
+            github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA'
+          )
         )
       )
     runs-on: ubuntu-latest
