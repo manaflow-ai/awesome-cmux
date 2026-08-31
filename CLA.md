@@ -4,6 +4,8 @@ Thank you for your interest in cmux, an open-source project of Manaflow, Inc. (t
 
 To sign electronically, post the exact comment `I have read the CLA Document and I hereby sign the CLA` on your GitHub pull request. That comment is your electronic signature and has the same effect as signing and returning a paper copy. You may instead complete and sign this Agreement and return a signed copy to Manaflow, Inc. Read this document carefully before signing and keep a copy for your records.
 
+For clarity, this Agreement covers only Contributions submitted to the [manaflow-ai/awesome-cmux repository](https://github.com/manaflow-ai/awesome-cmux), including its curated list, documentation, and repository tooling. It does not cover projects linked from the list or Contributions submitted directly to those projects. The linked projects' own licenses and contribution terms govern those Contributions.
+
 This Agreement is maintained in English and the English version controls. Any translation is provided for convenience only and does not change the terms of this Agreement.
 
 | | |
