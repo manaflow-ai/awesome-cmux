@@ -21,7 +21,7 @@ jobs:
     # a unique group per comment would recreate that fanout. GitHub keeps one
     # running and one pending run per group, and its expression comparisons
     # ignore case, so a same-PR case variant can replace the pending run before
-    # the exact shell gate rejects it. The contributor must repost. Only a
+    # the exact shell gate can reject it. The contributor must repost. Only a
     # trusted external webhook or App classifier removes that residual.
     if: >-
       (
@@ -39,20 +39,21 @@ jobs:
         github.event.comment.user.type == 'User' &&
         github.event.comment.user.id > 0 &&
         github.event.issue.pull_request &&
-        github.event.issue.state == 'open' &&
-        (
-          github.event.comment.body == 'recheck' ||
-          github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA'
-        )
+        github.event.issue.state == 'open'
       )
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
+    # Policy-invalid human comments finish successfully with admitted=false;
+    # unexpected setup or output failures remain job failures.
+    outputs:
+      admitted: ${{ steps.validate.outputs.admitted }}
     concurrency:
       group: cla-admission-${{ github.repository }}-${{ github.event_name }}-${{ github.event.issue.number || github.event.pull_request.number }}
       cancel-in-progress: false
     steps:
       - name: "Validate exact CLA trigger"
+        id: validate
         env:
           EVENT_NAME: ${{ github.event_name }}
           EVENT_ACTION: ${{ github.event.action }}
@@ -69,22 +70,39 @@ jobs:
             echo "::error title=CLA trigger policy::${1}"
             exit 1
           }
+          reject() {
+            if ! printf 'admitted=false\n' >> "${GITHUB_OUTPUT}"; then
+              echo "::error title=CLA trigger policy::Unable to publish the CLA admission result."
+              exit 1
+            fi
+            echo "::notice title=CLA trigger policy::${1}"
+            exit 0
+          }
+          admit() {
+            if ! printf 'admitted=true\n' >> "${GITHUB_OUTPUT}"; then
+              echo "::error title=CLA trigger policy::Unable to publish the CLA admission result."
+              exit 1
+            fi
+          }
           is_positive_numeric_id() {
             [[ "${1}" =~ ^[1-9][0-9]*$ ]]
           }
+          [[ -n "${GITHUB_OUTPUT:-}" ]] || fail "GitHub output channel is unavailable."
 
           sign_phrase='I have read the CLA Document and I hereby sign the CLA'
           if [[ "${EVENT_NAME}" == "issue_comment" ]]; then
-            [[ "${COMMENT_USER_TYPE}" == "User" ]] || fail "Only human GitHub users may trigger CLA signing comments."
-            is_positive_numeric_id "${COMMENT_USER_ID}" || fail "The comment author ID is missing or invalid."
-            [[ "${EVENT_ISSUE_STATE}" == "open" && -n "${EVENT_ISSUE_PR_URL}" ]] || fail "The comment is not on an open pull request."
-            [[ "${COMMENT_BODY}" == "${sign_phrase}" || "${COMMENT_BODY}" == "recheck" ]] || fail "Use the exact signing comment or the exact recheck command."
+            [[ "${COMMENT_USER_TYPE}" == "User" ]] || reject "Only human GitHub users may trigger CLA signing comments."
+            is_positive_numeric_id "${COMMENT_USER_ID}" || reject "The comment author ID is missing or invalid."
+            [[ "${EVENT_ISSUE_STATE}" == "open" && -n "${EVENT_ISSUE_PR_URL}" ]] || reject "The comment is not on an open pull request."
+            [[ "${COMMENT_BODY}" == "${sign_phrase}" || "${COMMENT_BODY}" == "recheck" ]] || reject "Use the exact signing comment or the exact recheck command."
+            admit
           elif [[ "${EVENT_NAME}" == "pull_request_target" ]]; then
             case "${EVENT_ACTION}" in
               opened|reopened|synchronize|edited) ;;
-              *) fail "The pull request event is not an accepted CLA trigger." ;;
+              *) reject "The pull request event is not an accepted CLA trigger." ;;
             esac
-            [[ "${EVENT_PR_STATE}" == "open" ]] || fail "The pull request is not open for CLA signing."
+            [[ "${EVENT_PR_STATE}" == "open" ]] || reject "The pull request is not open for CLA signing."
+            admit
           else
             fail "The event is not an accepted CLA trigger."
           fi
@@ -92,8 +110,8 @@ jobs:
   CLAAssistant:
     needs: CLACommentGate
     name: "CLA Assistant v2"
-    # Evaluate admission even when the gate is skipped or fails, then fail
-    # closed in the first step before any privileged work can run.
+    # Evaluate admission even when the gate is skipped or fails. A successful
+    # gate must explicitly admit this event before any privileged work runs.
     if: >-
       always() &&
       (
@@ -107,12 +125,12 @@ jobs:
           github.event.comment.user.type == 'User' &&
           github.event.comment.user.id > 0 &&
           github.event.issue.pull_request &&
-          github.event.issue.state == 'open' &&
-          (
-            github.event.comment.body == 'recheck' ||
-            github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA'
-          )
+          github.event.issue.state == 'open'
         )
+      ) &&
+      (
+        needs.CLACommentGate.result != 'success' ||
+        needs.CLACommentGate.outputs.admitted == 'true'
       )
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -134,10 +152,11 @@ jobs:
         if: always()
         env:
           GATE_RESULT: ${{ needs.CLACommentGate.result }}
+          GATE_ADMITTED: ${{ needs.CLACommentGate.outputs.admitted }}
         run: |
           set -euo pipefail
-          if [[ "${GATE_RESULT}" != "success" ]]; then
-            echo "::error title=CLA trigger policy::The exact CLA trigger gate did not succeed."
+          if [[ "${GATE_RESULT}" != "success" || "${GATE_ADMITTED}" != "true" ]]; then
+            echo "::error title=CLA trigger policy::The exact CLA trigger gate did not succeed with admitted=true."
             exit 1
           fi
 
