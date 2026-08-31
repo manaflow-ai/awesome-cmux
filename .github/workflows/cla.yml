@@ -295,8 +295,8 @@ jobs:
               github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA'
             )
           )
-        # Maintained Manaflow fork generation: v2.2-action-056a0e9d7237954489ab474f24e66c2e742e78f9
-        uses: manaflow-ai/cla-github-action@056a0e9d7237954489ab474f24e66c2e742e78f9 # v0.0.1
+        # Maintained Manaflow fork generation: v2.2-action-bc206ed9b52ad0b0cbe85244ce522e5e9b65c10e
+        uses: manaflow-ai/cla-github-action@bc206ed9b52ad0b0cbe85244ce522e5e9b65c10e # v0.0.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
