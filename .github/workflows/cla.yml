@@ -30,9 +30,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      # Temporary until the in-org action fork owns exact-head reruns. The
-      # archived action calls the rerun API after a contributor signs.
-      actions: write
+      # The archived action's branch-based rerun is unsafe. The exact-head
+      # rerun worker is not deployed yet, so required-check recovery is advisory.
+      actions: read
       contents: write
       issues: write
       pull-requests: write
