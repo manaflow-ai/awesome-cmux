@@ -36,6 +36,8 @@ jobs:
       ) ||
       (
         github.event_name == 'issue_comment' &&
+        github.event.comment.user.type == 'User' &&
+        github.event.comment.user.id > 0 &&
         github.event.issue.pull_request &&
         github.event.issue.state == 'open' &&
         (
@@ -58,6 +60,8 @@ jobs:
           EVENT_ISSUE_STATE: ${{ github.event.issue.state }}
           EVENT_ISSUE_PR_URL: ${{ github.event.issue.pull_request.url }}
           COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_USER_TYPE: ${{ github.event.comment.user.type }}
+          COMMENT_USER_ID: ${{ github.event.comment.user.id }}
         run: |
           set -euo pipefail
           shopt -u nocasematch
@@ -65,9 +69,14 @@ jobs:
             echo "::error title=CLA trigger policy::${1}"
             exit 1
           }
+          is_positive_numeric_id() {
+            [[ "${1}" =~ ^[1-9][0-9]*$ ]]
+          }
 
           sign_phrase='I have read the CLA Document and I hereby sign the CLA'
           if [[ "${EVENT_NAME}" == "issue_comment" ]]; then
+            [[ "${COMMENT_USER_TYPE}" == "User" ]] || fail "Only human GitHub users may trigger CLA signing comments."
+            is_positive_numeric_id "${COMMENT_USER_ID}" || fail "The comment author ID is missing or invalid."
             [[ "${EVENT_ISSUE_STATE}" == "open" && -n "${EVENT_ISSUE_PR_URL}" ]] || fail "The comment is not on an open pull request."
             [[ "${COMMENT_BODY}" == "${sign_phrase}" || "${COMMENT_BODY}" == "recheck" ]] || fail "Use the exact signing comment or the exact recheck command."
           elif [[ "${EVENT_NAME}" == "pull_request_target" ]]; then
@@ -83,8 +92,10 @@ jobs:
   CLAAssistant:
     needs: CLACommentGate
     name: "CLA Assistant v2"
+    # Evaluate admission even when the gate is skipped or fails, then fail
+    # closed in the first step before any privileged work can run.
     if: >-
-      needs.CLACommentGate.result == 'success' &&
+      always() &&
       (
         (
           github.event_name == 'pull_request_target' &&
@@ -93,6 +104,8 @@ jobs:
         ) ||
         (
           github.event_name == 'issue_comment' &&
+          github.event.comment.user.type == 'User' &&
+          github.event.comment.user.id > 0 &&
           github.event.issue.pull_request &&
           github.event.issue.state == 'open' &&
           (
@@ -117,23 +130,20 @@ jobs:
       group: cla-signatures-${{ github.repository }}-${{ github.event.pull_request.number || github.event.issue.number }}
       cancel-in-progress: false
     steps:
+      - name: "Require CLA trigger gate"
+        if: always()
+        env:
+          GATE_RESULT: ${{ needs.CLACommentGate.result }}
+        run: |
+          set -euo pipefail
+          if [[ "${GATE_RESULT}" != "success" ]]; then
+            echo "::error title=CLA trigger policy::The exact CLA trigger gate did not succeed."
+            exit 1
+          fi
+
       - name: "Check CLA commit history limit"
         # The maintained action admits at most 1,000 commits. Refuse larger
         # pull requests before any signature or comment write.
-        if: >-
-          (
-            github.event_name == 'pull_request_target' &&
-            github.event.action != 'closed'
-          ) ||
-          (
-            github.event_name == 'issue_comment' &&
-            github.event.issue.pull_request &&
-            github.event.issue.state == 'open' &&
-            (
-              github.event.comment.body == 'recheck' ||
-              github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA'
-            )
-          )
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -148,8 +158,24 @@ jobs:
           EVENT_BASE_REPO_FULL_NAME: ${{ github.event.pull_request.base.repo.full_name }}
           EVENT_BASE_REPO_ID: ${{ github.event.pull_request.base.repo.id }}
           EVENT_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          EVENT_OPENER_TYPE: ${{ github.event.pull_request.user.type }}
+          EVENT_COMMENT_USER_TYPE: ${{ github.event.comment.user.type }}
+          EVENT_COMMENT_USER_ID: ${{ github.event.comment.user.id }}
         run: |
           set -euo pipefail
+          is_positive_numeric_id() {
+            [[ "${1}" =~ ^[1-9][0-9]*$ ]]
+          }
+          if [[ "${EVENT_NAME}" == "issue_comment" ]]; then
+            [[ "${EVENT_COMMENT_USER_TYPE}" == "User" ]] || {
+              echo "::error title=CLA comment policy::Only human GitHub users may trigger CLA signing comments."
+              exit 1
+            }
+            is_positive_numeric_id "${EVENT_COMMENT_USER_ID}" || {
+              echo "::error title=CLA comment policy::The comment author ID is missing or invalid."
+              exit 1
+            }
+          fi
           if ! [[ "${PR_NUMBER}" =~ ^[1-9][0-9]*$ ]]; then
             echo "::error title=CLA preflight failed::Invalid pull request number."
             exit 1
@@ -165,14 +191,14 @@ jobs:
           verify_pr_snapshot() {
             local phase="$1"
             local pr_json
-            if ! pr_json="$(gh api "${pr_endpoint}" --jq '{base_ref: .base.ref, base_repo_full_name: .base.repo.full_name, base_repo_id: .base.repo.id, head_ref: .head.ref, head_sha: .head.sha, head_repo_full_name: .head.repo.full_name, head_repo_id: .head.repo.id, state: .state, merged: (.merged_at != null), commits: .commits}' 2>/dev/null)"; then
+            if ! pr_json="$(gh api "${pr_endpoint}" --jq '{base_ref: .base.ref, base_repo_full_name: .base.repo.full_name, base_repo_id: .base.repo.id, head_ref: .head.ref, head_sha: .head.sha, head_repo_full_name: .head.repo.full_name, head_repo_id: .head.repo.id, state: .state, merged: (.merged_at != null), commits: .commits, opener_type: .user.type}' 2>/dev/null)"; then
               echo "::error title=CLA ${phase} preflight failed::Unable to query live pull request metadata."
               return 1
             fi
 
             local base_ref base_repo_full_name base_repo_id
             local head_ref head_sha head_repo_full_name head_repo_id
-            local state merged commits
+            local state merged commits opener_type
             if ! base_ref="$(jq -er '.base_ref | strings' <<<"${pr_json}" 2>/dev/null)" || [[ -z "${base_ref}" ]]; then
               echo "::error title=CLA ${phase} preflight failed::GitHub returned no valid base branch."
               return 1
@@ -205,6 +231,10 @@ jobs:
               echo "::error title=CLA ${phase} state policy::Pull request is not open."
               return 1
             fi
+            if ! opener_type="$(jq -er '.opener_type | strings' <<<"${pr_json}" 2>/dev/null)" || [[ "${opener_type}" != "User" ]]; then
+              echo "::error title=CLA ${phase} opener policy::Bot-opened pull requests are not admitted."
+              return 1
+            fi
             if ! merged="$(jq -r '.merged' <<<"${pr_json}" 2>/dev/null)" || [[ "${merged}" != "false" ]]; then
               echo "::error title=CLA ${phase} state policy::Pull request is already merged or has an invalid merge state."
               return 1
@@ -229,8 +259,12 @@ jobs:
             fi
 
             if [[ "${EVENT_NAME}" == "pull_request_target" ]]; then
-              if [[ -z "${EVENT_HEAD_SHA}" || -z "${EVENT_HEAD_REF}" || -z "${EVENT_HEAD_REPO_FULL_NAME}" || -z "${EVENT_BASE_REPO_FULL_NAME}" || -z "${EVENT_BASE_REF}" ]]; then
+              if [[ -z "${EVENT_HEAD_SHA}" || -z "${EVENT_HEAD_REF}" || -z "${EVENT_HEAD_REPO_FULL_NAME}" || -z "${EVENT_BASE_REPO_FULL_NAME}" || -z "${EVENT_BASE_REF}" || -z "${EVENT_OPENER_TYPE}" ]]; then
                 echo "::error title=CLA ${phase} identity failed::The pull_request_target payload is missing repository identity."
+                return 1
+              fi
+              if [[ "${EVENT_OPENER_TYPE}" != "User" ]]; then
+                echo "::error title=CLA ${phase} opener policy::Bot-opened pull requests are not admitted."
                 return 1
               fi
               if ! [[ "${EVENT_HEAD_REPO_ID}" =~ ^[1-9][0-9]*$ ]] || ! [[ "${EVENT_BASE_REPO_ID}" =~ ^[1-9][0-9]*$ ]]; then
@@ -241,7 +275,7 @@ jobs:
                 echo "::error title=CLA ${phase} identity failed::The pull_request_target payload has an invalid head commit."
                 return 1
               fi
-              if [[ "${EVENT_HEAD_SHA}" != "${head_sha}" || "${EVENT_HEAD_REF}" != "${head_ref}" || "${EVENT_HEAD_REPO_FULL_NAME}" != "${head_repo_full_name}" || "${EVENT_HEAD_REPO_ID}" != "${head_repo_id}" ]]; then
+              if [[ "${EVENT_HEAD_SHA}" != "${head_sha}" || "${EVENT_HEAD_REF}" != "${head_ref}" || "${EVENT_HEAD_REPO_FULL_NAME}" != "${head_repo_full_name}" || "${EVENT_HEAD_REPO_ID}" != "${head_repo_id}" || "${EVENT_OPENER_TYPE}" != "${opener_type}" ]]; then
                 echo "::error title=CLA ${phase} identity policy::The pull_request_target head identity is stale."
                 return 1
               fi
@@ -268,12 +302,22 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_USER_TYPE: ${{ github.event.comment.user.type }}
+          COMMENT_USER_ID: ${{ github.event.comment.user.id }}
         run: |
           set -euo pipefail
           shopt -u nocasematch
           if [[ "${EVENT_NAME}" != 'issue_comment' ]]; then
             exit 0
           fi
+          [[ "${COMMENT_USER_TYPE}" == 'User' ]] || {
+            echo "::error title=CLA comment policy::Only human GitHub users may trigger CLA signing comments."
+            exit 1
+          }
+          [[ "${COMMENT_USER_ID}" =~ ^[1-9][0-9]*$ ]] || {
+            echo "::error title=CLA comment policy::The comment author ID is missing or invalid."
+            exit 1
+          }
           sign_phrase='I have read the CLA Document and I hereby sign the CLA'
           if [[ "${COMMENT_BODY}" != "${sign_phrase}" && "${COMMENT_BODY}" != 'recheck' ]]; then
             echo "::error title=CLA comment policy::Use the exact signing comment or the exact recheck command."
@@ -285,20 +329,6 @@ jobs:
         # disabled and use the explicit merged-PR lock step below. The
         # maintained action exact-matches raw bodies and bounds comment
         # pagination at 1,000 entries.
-        if: >-
-          (
-            github.event_name == 'pull_request_target' &&
-            github.event.action != 'closed'
-          ) ||
-          (
-            github.event_name == 'issue_comment' &&
-            github.event.issue.pull_request &&
-            github.event.issue.state == 'open' &&
-            (
-              github.event.comment.body == 'recheck' ||
-              github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA'
-            )
-          )
         # Maintained Manaflow fork generation: v2.2-action-bc206ed9b52ad0b0cbe85244ce522e5e9b65c10e
         uses: manaflow-ai/cla-github-action@bc206ed9b52ad0b0cbe85244ce522e5e9b65c10e # v0.0.1
         env:
@@ -316,8 +346,12 @@ jobs:
           branch: 'cla-signatures'
           required-base-ref: 'main'
           # Require the authenticated PR opener to appear as a commit author
-          # or co-author. This blocks forged commit identity bypasses.
+          # or co-author. This blocks forged commit identity bypasses. The
+          # workflow also rejects bot-opened pull requests before this action.
           require-opener-as-author: 'true'
+          # Do not configure the archived raw-login `allowlist` input. If a
+          # reviewed automation exception is ever added, it must use numeric
+          # `allowlist-ids` bound to reviewed immutable IDs, never names.
           custom-pr-sign-comment: 'I have read the CLA Document and I hereby sign the CLA'
 
   LockMergedPullRequest:
@@ -356,6 +390,7 @@ jobs:
           EVENT_BASE_REPO_ID: ${{ github.event.pull_request.base.repo.id }}
           EVENT_OPENER_LOGIN: ${{ github.event.pull_request.user.login }}
           EVENT_OPENER_ID: ${{ github.event.pull_request.user.id }}
+          EVENT_OPENER_TYPE: ${{ github.event.pull_request.user.type }}
         run: |
           set -euo pipefail
 
@@ -392,12 +427,12 @@ jobs:
           if [[ -z "${EVENT_BASE_REF}" || "${EVENT_BASE_REF}" != "main" || -z "${EVENT_BASE_REPO_FULL_NAME}" || "${EVENT_BASE_REPO_FULL_NAME,,}" != "${GH_REPO,,}" ]] || ! is_positive_safe_integer "${EVENT_BASE_REPO_ID}"; then
             fail "The event base repository identity is missing or invalid."
           fi
-          if [[ -z "${EVENT_OPENER_LOGIN}" ]] || ! is_positive_safe_integer "${EVENT_OPENER_ID}"; then
+          if [[ -z "${EVENT_OPENER_LOGIN}" || "${EVENT_OPENER_TYPE}" != "User" ]] || ! is_positive_safe_integer "${EVENT_OPENER_ID}"; then
             fail "The event opener identity is missing or invalid."
           fi
 
           pr_endpoint="repos/${GH_REPO}/pulls/${PR_NUMBER}"
-          if ! pr_json="$(gh api "${pr_endpoint}" --jq '{number: .number, state: .state, merged: (.merged_at != null), base_ref: .base.ref, base_repo_full_name: .base.repo.full_name, base_repo_id: .base.repo.id, head_sha: .head.sha, head_ref: .head.ref, head_repo_full_name: (.head.repo.full_name // null), head_repo_id: (.head.repo.id // null), opener_login: .user.login, opener_id: .user.id}' 2>/dev/null)"; then
+          if ! pr_json="$(gh api "${pr_endpoint}" --jq '{number: .number, state: .state, merged: (.merged_at != null), base_ref: .base.ref, base_repo_full_name: .base.repo.full_name, base_repo_id: .base.repo.id, head_sha: .head.sha, head_ref: .head.ref, head_repo_full_name: (.head.repo.full_name // null), head_repo_id: (.head.repo.id // null), opener_login: .user.login, opener_id: .user.id, opener_type: .user.type}' 2>/dev/null)"; then
             fail "Unable to query the live pull request."
           fi
           if ! jq -e '
@@ -415,6 +450,7 @@ jobs:
             ((.head_repo_full_name == null and .head_repo_id == null) or
               ((.head_repo_full_name | type) == "string" and (.head_repo_full_name | length) > 0 and (.head_repo_id | safe_id))) and
             (.opener_login | type) == "string" and (.opener_login | length) > 0 and
+            (.opener_type | type) == "string" and (.opener_type == "User") and
             (.opener_id | safe_id)
           ' <<<"${pr_json}" >/dev/null 2>/dev/null; then
             fail "The live pull request has an invalid identity or head structure."
@@ -430,6 +466,7 @@ jobs:
           live_head_ref="$(jq -er '.head_ref' <<<"${pr_json}")"
           live_opener_login="$(jq -er '.opener_login' <<<"${pr_json}")"
           live_opener_id="$(jq -er '.opener_id | floor | tostring' <<<"${pr_json}")"
+          live_opener_type="$(jq -er '.opener_type' <<<"${pr_json}")"
           live_head_repo_full_name="$(jq -r '.head_repo_full_name // empty' <<<"${pr_json}")"
           live_head_repo_id="$(jq -r 'if .head_repo_id == null then empty else (.head_repo_id | floor | tostring) end' <<<"${pr_json}")"
 
@@ -440,6 +477,7 @@ jobs:
           is_positive_safe_integer "${live_base_repo_id}" || fail "The live base repository ID is invalid."
           [[ "${live_base_repo_id}" == "${EVENT_REPO_ID}" && "${live_base_repo_id}" == "${EVENT_BASE_REPO_ID}" ]] || fail "The live base repository ID does not match the event."
           [[ "${live_opener_login,,}" == "${EVENT_OPENER_LOGIN,,}" ]] || fail "The live opener does not match the event."
+          [[ "${live_opener_type}" == "User" && "${live_opener_type}" == "${EVENT_OPENER_TYPE}" ]] || fail "Bot-opened pull requests are not admitted."
           is_positive_safe_integer "${live_opener_id}" || fail "The live opener ID is invalid."
           [[ "${live_opener_id}" == "${EVENT_OPENER_ID}" ]] || fail "The live opener ID does not match the event."
           # A merged PR's source branch can advance or its source repository can
