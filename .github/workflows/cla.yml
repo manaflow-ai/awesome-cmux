@@ -329,9 +329,10 @@ jobs:
       # read scope separately from the issue lock write scope.
       pull-requests: read
       issues: write
-    # Serialize the merged-PR lock with signature writes for this PR only.
+    # Keep merged-PR lock writes in a separate per-repository/per-PR lane.
+    # A lock must not replace a pending signer run, and vice versa.
     concurrency:
-      group: cla-signatures-${{ github.repository }}-${{ github.event.pull_request.number || github.event.issue.number }}
+      group: cla-lock-${{ github.repository }}-${{ github.event.pull_request.number || github.event.issue.number }}
       cancel-in-progress: false
     steps:
       - name: "Validate merged pull request identity"
