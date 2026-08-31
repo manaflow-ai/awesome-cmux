@@ -379,9 +379,13 @@ jobs:
           # or co-author. This blocks forged commit identity bypasses. The
           # workflow also rejects bot-opened pull requests before this action.
           require-opener-as-author: 'true'
-          # Do not configure the archived raw-login `allowlist` input. If a
-          # reviewed automation exception is ever added, it must use numeric
-          # `allowlist-ids` bound to reviewed immutable IDs, never names.
+          # Reviewed in-org opener exemptions: Austin Wang (@austinywang,
+          # GitHub ID 38676809) and Abdulaziz Albahar (@azooz2003-bit, GitHub
+          # ID 67667005). These IDs apply only when the live Pull Request API
+          # authenticates one of these accounts as the opener. They never
+          # exempt commit metadata or other contributors.
+          allowlist-ids: '38676809,67667005'
+          # Do not configure the deprecated raw-login `allowlist` input.
           custom-pr-sign-comment: 'I have read the CLA Document and I hereby sign the CLA'
 
   LockMergedPullRequest:
