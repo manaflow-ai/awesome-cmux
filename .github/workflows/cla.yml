@@ -186,6 +186,24 @@ jobs:
           # Re-fetch immediately before the action to reject a stale head or repository identity.
           verify_pr_snapshot "final"
 
+      - name: "Validate CLA comment spelling"
+        # GitHub expression equality is case-insensitive and the archived
+        # action accepts broad comment matches. Recheck in a trusted shell.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+        run: |
+          set -euo pipefail
+          shopt -u nocasematch
+          if [[ "${EVENT_NAME}" != 'issue_comment' ]]; then
+            exit 0
+          fi
+          sign_phrase='I have read the CLA Document and I hereby sign the CLA'
+          if [[ "${COMMENT_BODY}" != "${sign_phrase}" && "${COMMENT_BODY}" != 'recheck' ]]; then
+            echo "::error title=CLA comment policy::Use the exact signing comment or the exact recheck command."
+            exit 1
+          fi
+
       - name: "CLA Assistant"
         # The action handles signing and status updates. Merged pull requests
         # use the explicit lock step below because the archived action sends
@@ -219,6 +237,7 @@ jobs:
           lock-pullrequest-aftermerge: 'false'
           # signatures live on the unprotected cla-signatures branch so required checks on main don't block the bot's signature commits
           branch: 'cla-signatures'
+          required-base-ref: 'main'
           custom-pr-sign-comment: 'I have read the CLA Document and I hereby sign the CLA'
 
   LockMergedPullRequest:
