@@ -143,11 +143,12 @@ jobs:
       contents: write
       issues: write
       pull-requests: write
-    # Serialize duplicate signature work for this repository and PR only. The
-    # maintained action uses a bounded optimistic merge/retry for the shared
-    # ledger, so separate PRs do not share one public signer queue.
+    # Serialize duplicate signature work for this repository, event class, and
+    # PR. The maintained action uses a bounded optimistic merge/retry for the
+    # shared ledger, so lifecycle and comment runs cannot replace each other,
+    # while separate PRs do not share one public signer queue.
     concurrency:
-      group: cla-signatures-${{ github.repository }}-${{ github.event.pull_request.number || github.event.issue.number }}
+      group: cla-signatures-${{ github.repository }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number }}
       cancel-in-progress: false
     steps:
       - name: "Require CLA trigger gate"
