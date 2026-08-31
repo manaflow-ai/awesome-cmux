@@ -255,6 +255,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
+      # The live validation reads /pulls/{number}; GitHub requires this
+      # read scope separately from the issue lock write scope.
+      pull-requests: read
       issues: write
     # Serialize the merged-PR lock with signature writes for this PR only.
     concurrency:
