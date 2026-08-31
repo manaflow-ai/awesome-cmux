@@ -15,12 +15,14 @@ permissions: {}
 jobs:
   CLACommentGate:
     name: "Validate CLA trigger"
-    # This job has no write token. Its bounded, event-class queue prevents
-    # unrelated repositories and pull requests from sharing admission state.
-    # The shell step is the exact, case-sensitive authority because GitHub
-    # expression string comparisons ignore case. A same-PR case variant can
-    # replace the one pending gate and must be reposted; a webhook is needed
-    # to eliminate that residual without a trusted external classifier.
+    # This job has no write token. Its bounded, repository/event/PR-owned lane
+    # prevents unrelated repositories and pull requests from sharing admission
+    # state. Removing concurrency would allow unbounded public comment fanout;
+    # a unique group per comment would recreate that fanout. GitHub keeps one
+    # running and one pending run per group, and its expression comparisons
+    # ignore case, so a same-PR case variant can replace the pending run before
+    # the exact shell gate rejects it. The contributor must repost. Only a
+    # trusted external webhook or App classifier removes that residual.
     if: >-
       (
         github.event_name == 'pull_request_target' &&
