@@ -32,8 +32,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      # The archived action's branch-based rerun is unsafe. The exact-head
-      # rerun worker is not deployed yet, so required-check recovery is advisory.
+      # The reviewed maintained action does not call the workflow-rerun API.
+      # Keep this scope read-only until a separate exact-head rerun worker is
+      # deployed; required-check recovery remains advisory.
       actions: read
       contents: write
       issues: write
@@ -188,8 +189,8 @@ jobs:
           verify_pr_snapshot "final"
 
       - name: "Validate CLA comment spelling"
-        # GitHub expression equality is case-insensitive and the archived
-        # action accepts broad comment matches. Recheck in a trusted shell.
+        # GitHub expression equality is case-insensitive. Recheck the exact
+        # electronic-signature body in a trusted shell before the action runs.
         env:
           EVENT_NAME: ${{ github.event_name }}
           COMMENT_BODY: ${{ github.event.comment.body }}
@@ -206,9 +207,9 @@ jobs:
           fi
 
       - name: "Audit historical CLA comments"
-        # The maintained action retains compatibility matching for historical
-        # comments. Inspect every comment before it can write a
-        # signature. The canonical github-actions[bot] marker is ignored.
+        # The reviewed action reads historical comments. Inspect every comment
+        # first to fail closed on legacy near-matches and spoofed markers. The
+        # canonical github-actions[bot] marker is the only allowed bot marker.
         if: >-
           (
             github.event_name == 'pull_request_target' &&
@@ -363,7 +364,8 @@ jobs:
               github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA'
             )
           )
-        uses: manaflow-ai/cla-github-action@09d64fa8ba8b77ae253f354be6e1564d49317fa3 # v0.0.1
+        # Maintained Manaflow fork generation: v2.2-action-c327a6f4071730000bf03f9f85c87d30e1fe8084
+        uses: manaflow-ai/cla-github-action@c327a6f4071730000bf03f9f85c87d30e1fe8084 # v0.0.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
