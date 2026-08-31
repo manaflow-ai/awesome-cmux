@@ -254,6 +254,10 @@ jobs:
             echo "Pull request ${PR_NUMBER} is already locked"
             exit 0
           fi
+          if [[ "$locked" != "false" ]]; then
+            echo "::error title=CLA lock lookup::GitHub returned an invalid lock state for pull request ${PR_NUMBER}."
+            exit 1
+          fi
           if ! gh api --method PUT \
             --header 'Accept: application/vnd.github+json' \
             --header 'X-GitHub-Api-Version: 2022-11-28' \
