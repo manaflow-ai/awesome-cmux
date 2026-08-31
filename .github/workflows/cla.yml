@@ -104,9 +104,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      # The maintained action does not call the workflow-rerun API, so no
-      # Actions permission is granted. Required-check recovery remains
-      # advisory until a separate exact-head rerun worker is deployed.
+      # The maintained action's issue-comment workflow-rerun call is
+      # best-effort. No Actions permission is granted by design, so required-
+      # check recovery remains advisory until an exact-head rerun worker is
+      # deployed. The action publishes its result through the job conclusion,
+      # not a separate commit-status or check-run API call.
       contents: write
       issues: write
       pull-requests: write
