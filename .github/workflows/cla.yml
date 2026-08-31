@@ -4,7 +4,7 @@ on:
     types: [created]
   pull_request_target:
     branches: [main]
-    types: [opened,closed,reopened,synchronize,edited]
+    types: [opened,closed,reopened,synchronize]
 
 # Deny all permissions by default. The signature job grants only the API
 # scopes required by the archived action; the lock job narrows this further.
