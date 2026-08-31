@@ -15,9 +15,12 @@ permissions: {}
 jobs:
   CLACommentGate:
     name: "Validate CLA trigger"
-    # This job has no write token or concurrency group. The expression is a
-    # coarse candidate filter; the shell step is the exact, case-sensitive
-    # authority because GitHub expression string comparisons ignore case.
+    # This job has no write token. Its bounded, event-class queue prevents
+    # unrelated repositories and pull requests from sharing admission state.
+    # The shell step is the exact, case-sensitive authority because GitHub
+    # expression string comparisons ignore case. A same-PR case variant can
+    # replace the one pending gate and must be reposted; a webhook is needed
+    # to eliminate that residual without a trusted external classifier.
     if: >-
       (
         github.event_name == 'pull_request_target' &&
@@ -41,6 +44,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
+    concurrency:
+      group: cla-admission-${{ github.repository }}-${{ github.event_name }}-${{ github.event.issue.number || github.event.pull_request.number }}
+      cancel-in-progress: false
     steps:
       - name: "Validate exact CLA trigger"
         env:
@@ -289,8 +295,8 @@ jobs:
               github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA'
             )
           )
-        # Maintained Manaflow fork generation: v2.2-action-c327a6f4071730000bf03f9f85c87d30e1fe8084
-        uses: manaflow-ai/cla-github-action@c327a6f4071730000bf03f9f85c87d30e1fe8084 # v0.0.1
+        # Maintained Manaflow fork generation: v2.2-action-056a0e9d7237954489ab474f24e66c2e742e78f9
+        uses: manaflow-ai/cla-github-action@056a0e9d7237954489ab474f24e66c2e742e78f9 # v0.0.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
