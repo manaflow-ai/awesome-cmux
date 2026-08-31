@@ -32,10 +32,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      # The reviewed maintained action does not call the workflow-rerun API.
-      # Keep this scope read-only until a separate exact-head rerun worker is
-      # deployed; required-check recovery remains advisory.
-      actions: read
+      # The maintained action does not call the workflow-rerun API, so no
+      # Actions permission is granted. Required-check recovery remains
+      # advisory until a separate exact-head rerun worker is deployed.
       contents: write
       issues: write
       pull-requests: write
