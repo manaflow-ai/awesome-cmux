@@ -87,6 +87,7 @@ jobs:
             exit 1
           fi
 
+          # Pulls Get nests the source repository ID under head.repo.id.
           pr_endpoint="repos/${GH_REPO}/pulls/${PR_NUMBER}"
           verify_pr_snapshot() {
             local phase="$1"
@@ -322,7 +323,7 @@ jobs:
           fi
 
           pr_endpoint="repos/${GH_REPO}/pulls/${PR_NUMBER}"
-          if ! pr_json="$(gh api "${pr_endpoint}" --jq '{number: .number, state: .state, merged: (.merged_at != null), base_ref: .base.ref, base_repo_full_name: .base.repo.full_name, base_repo_id: .base.repo.id, head_sha: .head.sha, head_ref: .head.ref, head_repo_full_name: (.head.repo.full_name // null), head_repo_id: (.head.repo_id // null), opener_login: .user.login, opener_id: .user.id}' 2>/dev/null)"; then
+          if ! pr_json="$(gh api "${pr_endpoint}" --jq '{number: .number, state: .state, merged: (.merged_at != null), base_ref: .base.ref, base_repo_full_name: .base.repo.full_name, base_repo_id: .base.repo.id, head_sha: .head.sha, head_ref: .head.ref, head_repo_full_name: (.head.repo.full_name // null), head_repo_id: (.head.repo.id // null), opener_login: .user.login, opener_id: .user.id}' 2>/dev/null)"; then
             fail "Unable to query the live pull request."
           fi
           if ! jq -e '
