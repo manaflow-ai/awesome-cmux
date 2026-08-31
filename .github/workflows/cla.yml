@@ -363,7 +363,7 @@ jobs:
               github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA'
             )
           )
-        uses: manaflow-ai/cla-github-action@a34b7274a1f68a0d7bcb11e62a5f1454ea15515c # v0.0.1
+        uses: manaflow-ai/cla-github-action@09d64fa8ba8b77ae253f354be6e1564d49317fa3 # v0.0.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
