@@ -372,9 +372,8 @@ jobs:
           # this run, so a later default-branch edit cannot change the terms
           # after a contributor signs.
           path-to-document: 'https://github.com/manaflow-ai/awesome-cmux/blob/${{ github.workflow_sha }}/CLA.md'
-          # The archived action calls the lock endpoint without the required
-          # lock_reason. Disable that broken path and use the explicit step
-          # below, which supplies a valid reason and fails on API errors.
+          # Keep locking in the separate issues-only job below. It validates the
+          # merged PR identity before supplying the resolved lock reason.
           lock-pullrequest-aftermerge: 'false'
           # signatures live on the unprotected cla-signatures branch so required checks on main don't block the bot's signature commits
           branch: 'cla-signatures'
@@ -399,6 +398,119 @@ jobs:
       group: cla-signatures-${{ github.repository }}-${{ github.event.pull_request.number || github.event.issue.number }}
       cancel-in-progress: false
     steps:
+      - name: "Validate merged pull request identity"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          EVENT_REPO_FULL_NAME: ${{ github.event.repository.full_name }}
+          EVENT_REPO_ID: ${{ github.event.repository.id }}
+          EVENT_PR_NUMBER: ${{ github.event.pull_request.number }}
+          EVENT_PR_STATE: ${{ github.event.pull_request.state }}
+          EVENT_PR_MERGED: ${{ github.event.pull_request.merged }}
+          EVENT_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          EVENT_BASE_REPO_FULL_NAME: ${{ github.event.pull_request.base.repo.full_name }}
+          EVENT_BASE_REPO_ID: ${{ github.event.pull_request.base.repo.id }}
+          EVENT_OPENER_LOGIN: ${{ github.event.pull_request.user.login }}
+          EVENT_OPENER_ID: ${{ github.event.pull_request.user.id }}
+        run: |
+          set -euo pipefail
+
+          fail() {
+            echo "::error title=CLA merged pull request validation::${1}"
+            exit 1
+          }
+
+          is_positive_safe_integer() {
+            local value="$1"
+            [[ "${value}" =~ ^[1-9][0-9]*$ ]] || return 1
+            if (( ${#value} < 16 )); then
+              return 0
+            fi
+            if (( ${#value} == 16 )); then
+              (( 10#${value} <= 9007199254740991 ))
+              return
+            fi
+            return 1
+          }
+
+          if [[ "${EVENT_NAME}" != "pull_request_target" || "${EVENT_ACTION}" != "closed" ]]; then
+            fail "The lock job received an unexpected event."
+          fi
+          if ! [[ "${PR_NUMBER}" =~ ^[1-9][0-9]*$ ]] || [[ "${EVENT_PR_NUMBER}" != "${PR_NUMBER}" ]]; then
+            fail "The event has an invalid or mismatched pull request number."
+          fi
+          if [[ "${EVENT_PR_STATE}" != "closed" || "${EVENT_PR_MERGED}" != "true" ]]; then
+            fail "The event is not a closed merged pull request."
+          fi
+          if [[ -z "${EVENT_REPO_FULL_NAME}" || "${EVENT_REPO_FULL_NAME,,}" != "${GH_REPO,,}" ]] || ! is_positive_safe_integer "${EVENT_REPO_ID}"; then
+            fail "The event repository identity is missing or invalid."
+          fi
+          if [[ -z "${EVENT_BASE_REF}" || "${EVENT_BASE_REF}" != "main" || -z "${EVENT_BASE_REPO_FULL_NAME}" || "${EVENT_BASE_REPO_FULL_NAME,,}" != "${GH_REPO,,}" ]] || ! is_positive_safe_integer "${EVENT_BASE_REPO_ID}"; then
+            fail "The event base repository identity is missing or invalid."
+          fi
+          if [[ -z "${EVENT_OPENER_LOGIN}" ]] || ! is_positive_safe_integer "${EVENT_OPENER_ID}"; then
+            fail "The event opener identity is missing or invalid."
+          fi
+
+          pr_endpoint="repos/${GH_REPO}/pulls/${PR_NUMBER}"
+          if ! pr_json="$(gh api "${pr_endpoint}" --jq '{number: .number, state: .state, merged: .merged, base_ref: .base.ref, base_repo_full_name: .base.repo.full_name, base_repo_id: .base.repo.id, head_sha: .head.sha, head_ref: .head.ref, head_repo_full_name: (.head.repo.full_name // null), head_repo_id: (.head.repo.id // null), opener_login: .user.login, opener_id: .user.id}' 2>/dev/null)"; then
+            fail "Unable to query the live pull request."
+          fi
+          if ! jq -e '
+            def safe_id:
+              type == "number" and . > 0 and . <= 9007199254740991 and (floor == .);
+            type == "object" and
+            (.number | safe_id) and
+            (.state | type) == "string" and (.state | length) > 0 and
+            (.merged | type) == "boolean" and
+            (.base_ref | type) == "string" and (.base_ref | length) > 0 and
+            (.base_repo_full_name | type) == "string" and (.base_repo_full_name | length) > 0 and
+            (.base_repo_id | safe_id) and
+            (.head_sha | type) == "string" and (.head_sha | test("^[0-9A-Fa-f]+$")) and
+            (.head_ref | type) == "string" and (.head_ref | length) > 0 and
+            ((.head_repo_full_name == null and .head_repo_id == null) or
+              ((.head_repo_full_name | type) == "string" and (.head_repo_full_name | length) > 0 and (.head_repo_id | safe_id))) and
+            (.opener_login | type) == "string" and (.opener_login | length) > 0 and
+            (.opener_id | safe_id)
+          ' <<<"${pr_json}" >/dev/null 2>/dev/null; then
+            fail "The live pull request has an invalid identity or head structure."
+          fi
+
+          live_number="$(jq -er '.number | floor | tostring' <<<"${pr_json}")"
+          live_state="$(jq -er '.state' <<<"${pr_json}")"
+          live_merged="$(jq -er '.merged' <<<"${pr_json}")"
+          live_base_ref="$(jq -er '.base_ref' <<<"${pr_json}")"
+          live_base_repo_full_name="$(jq -er '.base_repo_full_name' <<<"${pr_json}")"
+          live_base_repo_id="$(jq -er '.base_repo_id | floor | tostring' <<<"${pr_json}")"
+          live_head_sha="$(jq -er '.head_sha' <<<"${pr_json}")"
+          live_head_ref="$(jq -er '.head_ref' <<<"${pr_json}")"
+          live_opener_login="$(jq -er '.opener_login' <<<"${pr_json}")"
+          live_opener_id="$(jq -er '.opener_id | floor | tostring' <<<"${pr_json}")"
+          live_head_repo_full_name="$(jq -r '.head_repo_full_name // empty' <<<"${pr_json}")"
+          live_head_repo_id="$(jq -r 'if .head_repo_id == null then empty else (.head_repo_id | floor | tostring) end' <<<"${pr_json}")"
+
+          [[ "${live_number}" == "${PR_NUMBER}" ]] || fail "The live pull request number does not match the event."
+          [[ "${live_state}" == "closed" && "${live_merged}" == "true" ]] || fail "The live pull request is not closed and merged."
+          [[ "${live_base_ref}" == "main" && "${EVENT_BASE_REF}" == "${live_base_ref}" ]] || fail "The live base branch does not match main."
+          [[ "${live_base_repo_full_name,,}" == "${GH_REPO,,}" && "${EVENT_BASE_REPO_FULL_NAME,,}" == "${live_base_repo_full_name,,}" ]] || fail "The live base repository does not match the event repository."
+          is_positive_safe_integer "${live_base_repo_id}" || fail "The live base repository ID is invalid."
+          [[ "${live_base_repo_id}" == "${EVENT_REPO_ID}" && "${live_base_repo_id}" == "${EVENT_BASE_REPO_ID}" ]] || fail "The live base repository ID does not match the event."
+          [[ "${live_opener_login,,}" == "${EVENT_OPENER_LOGIN,,}" ]] || fail "The live opener does not match the event."
+          is_positive_safe_integer "${live_opener_id}" || fail "The live opener ID is invalid."
+          [[ "${live_opener_id}" == "${EVENT_OPENER_ID}" ]] || fail "The live opener ID does not match the event."
+          # A merged PR's source branch can advance or its source repository can
+          # be deleted. Validate the live head shape, but do not compare it to
+          # the closed-event head fields.
+          [[ -n "${live_head_sha}" && "${live_head_sha}" =~ ^[0-9A-Fa-f]+$ && -n "${live_head_ref}" ]] || fail "The live head structure is invalid."
+          if [[ -n "${live_head_repo_full_name}" || -n "${live_head_repo_id}" ]]; then
+            [[ -n "${live_head_repo_full_name}" ]] || fail "The live head repository name is missing."
+            is_positive_safe_integer "${live_head_repo_id}" || fail "The live head repository ID is invalid."
+          fi
+          echo "CLA merged pull request identity verified."
+
       - name: "Lock merged pull request"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
