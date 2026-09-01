@@ -12,6 +12,11 @@ on:
 # scopes required by the maintained action; the lock job narrows this further.
 permissions: {}
 
+# Change this marker only when the CLA policy or maintained action changes.
+# It keeps rerun workers tied to a stable policy generation.
+env:
+  CLA_GENERATION: 'v2.2-action-fc608ba7106e7029d981d487d7bad28a64325956'
+
 jobs:
   CLACommentGate:
     name: "Validate CLA trigger"
@@ -359,12 +364,12 @@ jobs:
         # disabled and use the explicit merged-PR lock step below. The
         # maintained action exact-matches raw bodies and bounds comment
         # pagination at 1,000 entries.
-        # Maintained Manaflow fork generation: v2.2-action-bc206ed9b52ad0b0cbe85244ce522e5e9b65c10e
-        uses: manaflow-ai/cla-github-action@bc206ed9b52ad0b0cbe85244ce522e5e9b65c10e # v0.0.1
+        # Maintained Manaflow fork generation: v2.2-action-fc608ba7106e7029d981d487d7bad28a64325956
+        uses: manaflow-ai/cla-github-action@fc608ba7106e7029d981d487d7bad28a64325956 # reviewed maintained fork runtime+dist
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          path-to-signatures: 'signatures/version1/cla.json'
+          path-to-signatures: 'signatures/version2/cla.json'
           # Pin the displayed document to the workflow revision that started
           # this run, so a later default-branch edit cannot change the terms
           # after a contributor signs.
