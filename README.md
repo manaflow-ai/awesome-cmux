@@ -373,6 +373,8 @@ Git worktrees give each agent an isolated copy of the repository on a separate b
 | **OpenCode** | | | |
 | [kdcokenny/opencode-worktree](https://github.com/kdcokenny/opencode-worktree) | OpenCode | Spawn a dedicated terminal with OpenCode running inside each new git worktree, sync files via post-checkout hooks, and auto-commit staged changes on worktree deletion | TypeScript · ★504 |
 | [kdcokenny/opencode-workspace](https://github.com/kdcokenny/opencode-workspace) | OpenCode | Bundle worktree isolation as one of 16 composable OpenCode workspace components, tying it into a broader multi-agent orchestration layer rather than treating it as a standalone script | TypeScript · ★402 |
+| **Codex** | | | |
+| [dapi/cmux-codex-spotlight](https://github.com/dapi/cmux-codex-spotlight) | Codex | Search cmux workspace and surface names through native macOS Spotlight, then focus the selected existing location. Index related Codex session titles alongside workspace aliases, and resume saved sessions in a new tab with their original working directory. | Swift |
 | **Multi / Other** | | | |
 | [eunjae-lee/cmux-worktree](https://github.com/eunjae-lee/cmux-worktree) | — | Drive worktree creation from a declarative YAML workspace definition, supporting custom pre/post workflows, configurable split layouts, and per-pane isolated browser storage | TypeScript |
 | [rjwittams/flotilla](https://github.com/rjwittams/flotilla) | Multi | Correlate branches, open PRs, and issues across multiple repos simultaneously, with agent hook integration that triggers worktree setup and teardown from CI/PR events | Rust |
@@ -407,6 +409,8 @@ Agents can run for hours. When cmux restarts, crashes, or you close the lid, you
 | [niaeee/cmux_skill](https://github.com/niaeee/cmux_skill) | Claude Code | Watch surfaces for IDLE/ERROR/STALL states across 124 domain specialists via 18 hooks and 28 scripts — the most granular Korean-language monitoring skill by specialist count | — |
 | [JacianLiu/cmux-claude-session](https://github.com/JacianLiu/cmux-claude-session) | Claude Code | Capture and restore sessions using stable layout coordinates instead of volatile surface UUIDs with a layout-change hook for live remapping — solves the UUID-instability problem that breaks other restore tools | Shell |
 | [Yeachan-Heo/oh-my-claudecode](https://github.com/Yeachan-Heo/oh-my-claudecode) | Claude Code | Monitor a tri-model advisor (Claude+Codex+Gemini) and team pipeline from tmux worker panes — surfaces cross-model orchestration state that single-agent monitors cannot capture | TypeScript · ★32659 |
+| **Codex** | | | |
+| [dapi/cmux-codex-spotlight](https://github.com/dapi/cmux-codex-spotlight) | Codex | Find current, saved, and archived Codex sessions through macOS Spotlight using local metadata. Focus running cmux tabs by surface UUID, or unarchive and resume a selected session in its original directory; conversation contents remain outside the search index. | Swift |
 | **Multi / Other** | | | |
 | [rjwittams/flotilla](https://github.com/rjwittams/flotilla) | Multi | Correlate agents, branches, and PRs across multiple repos into unified work items via a TUI dashboard — cross-repo aggregation makes it distinct from single-workspace monitoring tools | Rust |
 | [owizdom/context-brdige-for-cmux](https://github.com/owizdom/context-brdige-for-cmux) | Multi | Poll panes from any agent, extract structured context, persist snapshots to SQLite, and auto-inject compressed handoff briefs into new sessions — persistence layer differentiates it from in-memory restore tools | Go |
@@ -457,6 +461,7 @@ The right layout turns cmux from a terminal into a development cockpit. Three-pa
 | [eunjae-lee/cmux-worktree](https://github.com/eunjae-lee/cmux-worktree) | — | Declare workspace layouts in YAML with split-pane definitions, suspended background tabs, and isolated browser storage per git worktree for clean parallel branches | TypeScript |
 | [drolosoft/cmux-resurrect](https://github.com/drolosoft/cmux-resurrect) | — | Save and restore full workspace layouts using Markdown blueprint files that are Obsidian-compatible and git-versionable, surviving reboots without a tmux plugin manager | Go · ★31 |
 | [stevenocchipinti/raycast-cmux](https://github.com/stevenocchipinti/raycast-cmux) | — | Search, focus, and manage cmux workspaces and panes directly from Raycast with keyboard-driven commands, eliminating the need to touch the mouse or switch apps | TypeScript |
+| [dapi/cmux-codex-spotlight](https://github.com/dapi/cmux-codex-spotlight) | Codex | Add a native macOS Spotlight launcher for cmux workspaces, terminal tabs, browser tabs, and Codex sessions. Keep searchable names refreshed from the current cmux tree, follow moved surfaces, and open results through existing-tab focus or saved-session resume. | Swift |
 | [karlorz/dev-docs-cmux](https://github.com/karlorz/dev-docs-cmux) | — | Fetch and keep current LLM-optimised documentation for cmux dependencies via a make-driven workflow, ensuring agents always have accurate API references in context | Shell |
 | [jcyamacho/zdotfiles](https://github.com/jcyamacho/zdotfiles) | — | Wire up a Zsh environment with Antidote plugin management, Starship prompt, and opinionated install helpers for cmux, fzf, zoxide, and git-worktree workflows | Zsh |
 | [chrisliu298/ghostty-config](https://github.com/chrisliu298/ghostty-config) | — | Configure Ghostty with a GitHub Dark theme, Berkeley Mono 18pt, 128 MiB scrollback buffer, and cmux-ready key bindings tuned for long agent sessions | — |
@@ -658,6 +663,7 @@ These projects work across multiple agents or are agent-agnostic.
 | [basedcorp99/claude-worktree-zsh](https://github.com/basedcorp99/claude-worktree-zsh) | `worktree` `orchestrate` | Launch 5 agents (Claude/Codex/Droid/OpenCode/Pi) in worktrees with `cwl` dashboard and `cwm` merge-back | Shell |
 | [TimoKruth/cmux-t3code](https://github.com/TimoKruth/cmux-t3code) | `browser` `layout` `worktree` | Embed t3code AI coding GUI as per-workspace chat panels via sidecar Node.js servers on unique ports | — |
 | [LattyCat/cmux-workspace](https://github.com/LattyCat/cmux-workspace) | `layout` `config` | Create a Japanese 4-pane layout with yazi + Markdown preview + lazygit + AI terminal, symlinked to command palette | Shell |
+| [dapi/cmux-codex-spotlight](https://github.com/dapi/cmux-codex-spotlight) | `monitor` `layout` | Search cmux workspaces and surfaces by name through native macOS Spotlight, and find current, saved, or archived Codex sessions in the same search. Focus existing tabs or resume sessions in their original directory, using a local metadata index. | Swift |
 
 ---
 
