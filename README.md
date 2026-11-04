@@ -112,6 +112,7 @@ cmux's vertical sidebar is the primary surface for agent feedback. Plugins write
 | [EtanHey/cmuxlayer](https://github.com/EtanHey/cmuxlayer) | Multi | Expose 22 tightly scoped MCP tools for sidebar updates, progress, split creation, and screen reading — smaller and more auditable than cmux-agent-mcp's 81-tool suite, while still covering multi-agent orchestration | TypeScript · ★5 |
 | [gonzaloserrano/streamdeck-cmux](https://github.com/gonzaloserrano/streamdeck-cmux) | — | Extends status visibility beyond the screen entirely: mirror workspace state, progress bars, and notification badges onto Elgato Stream Deck hardware buttons — the only physical-hardware integration in the list | TypeScript · ★14 |
 | [Minoo7/cmux-hooks](https://github.com/Minoo7/cmux-hooks) | Multi | Fan out cmux-aware hooks to SSH hosts, Hermes, and omp/Pi, then relay agent activity back as local notifications and sidebar badges through a stdlib helper rather than per-agent hand-written scripts | Shell |
+| [s4ff0x/cmux-sidebar](https://github.com/s4ff0x/cmux-sidebar) | Multi | Replace the left sidebar through the custom-sidebar runtime instead of adding status pills: nest workspace groups by `/` in their names, mark mid-turn agents orange and unseen finished turns green, and keep active rows visible inside collapsed groups, with Active and Favorites filters | JavaScript |
 
 ### 2. Progress Bars & Estimation
 
@@ -381,6 +382,7 @@ Git worktrees give each agent an isolated copy of the repository on a separate b
 | [LattyCat/cmux-workspace](https://github.com/LattyCat/cmux-workspace) | Multi | Create a Japanese 4-pane layout: yazi + glow/watchexec Markdown preview + lazygit + AI terminal with symlinks to the cmux command palette — opinionated development cockpit for Japanese-language workflows | Shell |
 | [dongsik93/crosstalk](https://github.com/dongsik93/crosstalk) | Multi | Run co-work assignments across Claude, Codex, and Antigravity panes, optionally pairing those panes with git worktrees so each agent can deliver a separate slice before verdict collection | Shell |
 | [n-filatov/cmux-workspace](https://github.com/n-filatov/cmux-workspace) | Multi | Create cmux workspaces with fresh git worktrees and per-repo setup commands inferred into `.cmux-workspace.json`, replacing repeated branch/bootstrap steps with a committed project launcher | TypeScript |
+| [s4ff0x/cmux-sidebar](https://github.com/s4ff0x/cmux-sidebar) | Multi | Organize workspaces into a nested tree by encoding the hierarchy in group names (`Work/Backend/API`), with drag-and-drop between levels, subtree moves, multi-select bulk close, favorites stored as native pins and title colors stored as native workspace colors, all from one custom-sidebar file | JavaScript |
 
 ### 8. Monitoring & Session Restore
 
@@ -658,6 +660,7 @@ These projects work across multiple agents or are agent-agnostic.
 | [basedcorp99/claude-worktree-zsh](https://github.com/basedcorp99/claude-worktree-zsh) | `worktree` `orchestrate` | Launch 5 agents (Claude/Codex/Droid/OpenCode/Pi) in worktrees with `cwl` dashboard and `cwm` merge-back | Shell |
 | [TimoKruth/cmux-t3code](https://github.com/TimoKruth/cmux-t3code) | `browser` `layout` `worktree` | Embed t3code AI coding GUI as per-workspace chat panels via sidecar Node.js servers on unique ports | — |
 | [LattyCat/cmux-workspace](https://github.com/LattyCat/cmux-workspace) | `layout` `config` | Create a Japanese 4-pane layout with yazi + Markdown preview + lazygit + AI terminal, symlinked to command palette | Shell |
+| [s4ff0x/cmux-sidebar](https://github.com/s4ff0x/cmux-sidebar) | `sidebar` `monitor` `layout` | Replace the left sidebar with a nested group tree and agent dots read from cmux's generic session status, so Claude Code, omp and other hooked agents show working and finished states the same way | JavaScript |
 
 ---
 
